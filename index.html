@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Signature Verification</title>
+</head>
+<body>
+  <h2>Upload Signature Images</h2>
+  <form id="form" enctype="multipart/form-data">
+    Reference Image: <input type="file" name="ref" required><br><br>
+    Test Image: <input type="file" name="test" required><br><br>
+    <input type="submit" value="Verify">
+  </form>
+
+  <div id="result"></div>
+
+  <script>
+    const form = document.getElementById("form");
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const response = await fetch("/verify", {
+        method: "POST",
+        body: formData
+      });
+      const result = await response.json();
+      document.getElementById("result").innerText = `Result: ${result.result}\nScore: ${result.similarity_score.toFixed(4)}`;
+    }
+  </script>
+</body>
+</html>

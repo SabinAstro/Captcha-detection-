@@ -1,33 +1,36 @@
-from flask import Flask, request, jsonify
-import cv2
-import numpy as np
+from flask import Flask, request, jsonify, render_template
 from tensorflow.keras.models import load_model
-from sklearn.preprocessing import LabelBinarizer
+import numpy as np
+import os
+from utils.preprocess import preprocess_image
 
 app = Flask(__name__)
+model = load_model("model/siamese_model.h5")
 
-# Load model and label binarizer
-model = load_model("captcha_breaker_model.h5")
-CHAR_SET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-lb = LabelBinarizer()
-lb.fit(list(CHAR_SET))
+THRESHOLD = 0.5  # Similarity threshold
 
-def decode_prediction(preds):
-    return ''.join(lb.classes_[np.argmax(p)] for p in preds)
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-@app.route("/predict", methods=["POST"])
-def predict():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+@app.route("/verify", methods=["POST"])
+def verify_signature():
+    if 'ref' not in request.files or 'test' not in request.files:
+        return jsonify({"error": "Upload both 'ref' and 'test' signature images."}), 400
 
-    file = request.files["file"]
-    image_bytes = file.read()
-    image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, (160, 60)) / 255.0
-    image = image.reshape(1, 60, 160, 1)
-    preds = model.predict(image)
-    prediction = decode_prediction(preds)
-    return jsonify({"prediction": prediction})
+    ref_img = preprocess_image(request.files['ref'].read())
+    test_img = preprocess_image(request.files['test'].read())
+
+    ref_img = ref_img.reshape(1, 105, 105, 1)
+    test_img = test_img.reshape(1, 105, 105, 1)
+
+    pred = model.predict([ref_img, test_img])[0][0]
+    is_genuine = pred < THRESHOLD
+
+    return jsonify({
+        "similarity_score": float(1 - pred),
+        "result": "Genuine" if is_genuine else "Forged"
+    })
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
